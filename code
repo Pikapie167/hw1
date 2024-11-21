@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 # 讀取圖片
-image = cv2.imread(r'C:\Users\b5403175\Desktop\opencv\middle-of-the-road-1332589.jpg')
+image = cv2.imread(r'a.jpg')
 # 灰階處理
 def cvtColor(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -88,9 +88,6 @@ def morphology(binary):
     binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)  # 填補小洞
     binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)  # 去除噪點
 
-    # 直方圖分析 (此處可根據需求進行進一步的閾值處理來強化特徵)
-    hist = cv2.calcHist([binary], [0], None, [256], [0, 256])
-
     # 連通區域檢測：填補邊界
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary)
 
@@ -105,18 +102,6 @@ def morphology(binary):
     return binary
 
 binary=morphology(binary)
-
-# 距離測量 (使用簡單的中心線距離測量)
-height, width = binary.shape
-center_x = width // 2
-distances = np.zeros_like(binary, dtype=np.float32)  # 使用 float32 來避免溢位
-for y in range(height):
-    for x in range(width):
-        distances[y, x] = abs(x - center_x) if binary[y, x] == 255 else 0
-
-# 將距離矩陣正規化到 0-255 範圍
-distances_normalized = cv2.normalize(distances, None, 0, 255, cv2.NORM_MINMAX)
-distances_normalized = distances_normalized.astype(np.uint8)
 
 # 手動標籤化 (將道路區域標示為255，其它為0)
 def labeled(binary):
@@ -135,8 +120,8 @@ cv2.imshow("Gray", gray)
 cv2.imshow("Sobel Edges", sobel_image)
 cv2.imshow("LBP", lbp_image)
 cv2.imshow("Binary", binary)
-cv2.imshow("Distance Transform", distances_normalized)
 cv2.imshow("Road Colored Green", road_colored)
 
 cv2.waitKey(0)
 cv2.destroyAllWindows()
+
