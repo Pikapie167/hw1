@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 # 讀取圖片
-image = cv2.imread(r'C:\\Users\\b5403175\\Desktop\\B.jpg')
+image = cv2.imread(r'C:\\Users\\b5403175\\Desktop\\OIP.jpg')
 
 # 使用HSV空間來進行顏色範圍過濾
 def filter_black_gray_roads(image):
@@ -89,8 +89,8 @@ mask_black_gray_roads = morphological_operations(mask_black_gray_roads_raw)
 
 lbp_image = lbp(gray, mask_black_gray_roads)
 
-# 繪製直方圖並找出前10高項，只計算有hsv遮罩的地方
-def plot_histogram_and_find_top10(image, mask):
+# 繪製直方圖並找出前3高項，只計算有hsv遮罩的地方
+def plot_histogram_and_find_top3(image, mask):
     hist = cv2.calcHist([image], [0], mask, [256], [0, 256])
     hist_img = np.zeros((300, 256), dtype=np.uint8)
     hist = cv2.normalize(hist,hist).flatten()
@@ -98,26 +98,23 @@ def plot_histogram_and_find_top10(image, mask):
     for x,y in enumerate(hist):
         cv2.line(hist_img,(x,int(300)),(x,int(300-y*300)),255)
     
-    # 找出前10高項
-    top10_indices = np.argsort(hist)[::-1][:10]
+    # 找出前3高項
+    top3_indices = np.argsort(hist)[::-1][:3]
     
-    return hist_img, top10_indices
+    return hist_img, top3_indices
 
-hist_img, top10_indices = plot_histogram_and_find_top10(lbp_image, mask_black_gray_roads)
+hist_img, top3_indices = plot_histogram_and_find_top3(lbp_image, mask_black_gray_roads)
 
-# 根據直方圖的前10高項進行標記，未標記的地方塗成紅色
-def mark_top10_regions_on_original(image, lbp_image, top10_indices):
+# 根據直方圖的前3高項進行標記，標記的地方著成紅色，未標記的地方不著色，標記要在有hsv遮罩的地方
+def mark_top3_regions_on_original(image, lbp_image, top3_indices, mask_black_gray_roads):
     marked_image = np.zeros_like(image)
     
-    # 將未標記的地方塗成紅色 (Red)
-    marked_image[:] = [0, 0, 255]
-    
-    for idx in top10_indices:
-        marked_image[lbp_image == idx] = image[lbp_image == idx]  # 標記的地方保持原色
+    for idx in top3_indices:
+        marked_image[(lbp_image == idx) & (mask_black_gray_roads == 255)] = [0, 0, 255]  # 標記的地方著成紅色
     
     return marked_image
 
-marked_regions = mark_top10_regions_on_original(image.copy(), lbp_image.copy(), top10_indices)
+marked_regions = mark_top3_regions_on_original(image.copy(), lbp_image, top3_indices, mask_black_gray_roads)
 
 # 將標記著色的圖覆蓋在原圖上
 result_image = cv2.addWeighted(image.copy(), 0.7, marked_regions.copy(), 0.3, 0)
