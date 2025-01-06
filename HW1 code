@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 # 讀取圖片
-image = cv2.imread(r'C:\\Users\\b5403175\\Desktop\\C.jpg')
+image = cv2.imread(r'C:\\Users\\b5403175\\Desktop\\OIP.jpg')
 
 # 使用HSV空間來進行顏色範圍過濾
 def filter_black_gray_roads(image):
@@ -30,10 +30,10 @@ def filter_black_gray_roads(image):
     mask_blue_avoid = cv2.inRange(hsv_image, lower_blue_avoid, upper_blue_avoid)
 
     # 合併遮罩，並排除藍色成分
-    mask_combined = cv2.bitwise_or(mask_black, mask_gray_white)
-    mask_combined = cv2.bitwise_and(mask_combined, cv2.bitwise_not(mask_blue_avoid))
+    mask_combined_img = cv2.bitwise_or(mask_black, mask_gray_white)
+    mask_combined_img = cv2.bitwise_and(mask_combined_img, cv2.bitwise_not(mask_blue_avoid))
 
-    return mask_combined, hsv_image
+    return mask_combined_img
 
 # 對遮罩進行形態學操作
 def morphological_operations(mask):
@@ -43,9 +43,9 @@ def morphological_operations(mask):
     mask_opened = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
     
     # 閉運算 (填補孔洞)
-    mask_closed = cv2.morphologyEx(mask_opened, cv2.MORPH_CLOSE, kernel)
+    mask_closed_img = cv2.morphologyEx(mask_opened, cv2.MORPH_CLOSE, kernel)
     
-    return mask_closed
+    return mask_closed_img
 
 # 灰階處理
 def cvtColor(image):
@@ -55,39 +55,39 @@ def cvtColor(image):
 gray = cvtColor(image)
 
 # Sobel 邊緣檢測 (增強效果)
-def sobel_edge_detection(image, x):
+def Sobel(image, x):
     sobel_x = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=x)  # 墛大內核大小，提高邊緣檢測
     sobel_y = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=x)
     sobel_mag = cv2.magnitude(sobel_x, sobel_y)
     sobel_mag = np.uint8(np.absolute(sobel_mag))  # 絕對值
     return sobel_mag
 
-sobel_image = sobel_edge_detection(gray, 3)
+sobel_image = Sobel(gray, 3)
 
 # LBP 邊緣檢測應用於Sobel邊緣檢測後的圖像
-def lbp(image, mask):
-    lbp_image = np.zeros_like(image)
-    for i in range(1, image.shape[0] - 1):
-        for j in range(1, image.shape[1] - 1):
+def lbp(sobel_img, mask):
+    lbp_image = np.zeros_like(sobel_img)
+    for i in range(1, sobel_img.shape[0] - 1):
+        for j in range(1, sobel_img.shape[1] - 1):
             if mask[i, j] > 0:  # 只在遮罩範圍內執行 LBP
-                center = image[i, j]
+                center = sobel_img[i, j]
                 binary_string = ''
-                binary_string += '1' if image[i-1, j-1] > center else '0'
-                binary_string += '1' if image[i-1, j] > center else '0'
-                binary_string += '1' if image[i-1, j+1] > center else '0'
-                binary_string += '1' if image[i, j+1] > center else '0'
-                binary_string += '1' if image[i+1, j+1] > center else '0'
-                binary_string += '1' if image[i+1, j] > center else '0'
-                binary_string += '1' if image[i+1, j-1] > center else '0'
-                binary_string += '1' if image[i, j-1] > center else '0'
+                binary_string += '1' if sobel_img[i-1, j-1] > center else '0'
+                binary_string += '1' if sobel_img[i-1, j] > center else '0'
+                binary_string += '1' if sobel_img[i-1, j+1] > center else '0'
+                binary_string += '1' if sobel_img[i, j+1] > center else '0'
+                binary_string += '1' if sobel_img[i+1, j+1] > center else '0'
+                binary_string += '1' if sobel_img[i+1, j] > center else '0'
+                binary_string += '1' if sobel_img[i+1, j-1] > center else '0'
+                binary_string += '1' if sobel_img[i, j-1] > center else '0'
                 lbp_image[i, j] = int(binary_string, 2)
     return lbp_image
 
 # 過濾黑灰色道路並進行形態學操作
-mask_black_gray_roads_raw, hsv_image = filter_black_gray_roads(image)
-mask_black_gray_roads = morphological_operations(mask_black_gray_roads_raw)
+mask_closed_img_raw = filter_black_gray_roads(image)
+mask_closed_img = morphological_operations(mask_closed_img_raw)
 
-lbp_image = lbp(sobel_image, mask_black_gray_roads)
+lbp_image = lbp(sobel_image, mask_closed_img)
 
 # 繪製直方圖並找出前3高項，只計算有hsv遮罩的地方
 def plot_histogram_and_find_top3(image, mask):
@@ -103,18 +103,18 @@ def plot_histogram_and_find_top3(image, mask):
     
     return hist_img, top3_indices
 
-hist_img, top3_indices = plot_histogram_and_find_top3(lbp_image, mask_black_gray_roads)
+hist_img, top3_indices = plot_histogram_and_find_top3(lbp_image, mask_closed_img)
 
 # 根據直方圖的前3高項進行標記，標記的地方著成紅色，未標記的地方不著色，標記要在有hsv遮罩的地方
-def mark_top3_regions_on_original(image, lbp_image, top3_indices, mask_black_gray_roads):
+def Labeling(image, lbp_image, top3_indices, mask_closed_img):
     marked_image = np.zeros_like(image)
     
     for idx in top3_indices:
-        marked_image[(lbp_image == idx) & (mask_black_gray_roads == 255)] = [0, 0, 255]  # 標記的地方著成紅色
+        marked_image[(lbp_image == idx) & (mask_closed_img == 255)] = [0, 0, 255]  # 標記的地方著成紅色
     
     return marked_image
 
-marked_regions = mark_top3_regions_on_original(image.copy(), lbp_image, top3_indices, mask_black_gray_roads)
+marked_regions = Labeling(image.copy(), lbp_image, top3_indices, mask_closed_img)
 
 # 將標記著色的圖覆蓋在原圖上
 result_image = cv2.addWeighted(image.copy(), 0.7, marked_regions.copy(), 0.3, 0)
@@ -126,8 +126,8 @@ cv2.imshow("Sobel Edges", sobel_image)
 cv2.imshow("LBP", lbp_image)
 cv2.imshow("Histogram", hist_img)
 cv2.imshow("Marked Regions on Original", result_image)
-cv2.imshow("HSV Filtered", mask_black_gray_roads_raw) 
-cv2.imshow("Morphological Operations on Mask", mask_black_gray_roads)
+cv2.imshow("HSV Filtered", mask_closed_img_raw) 
+cv2.imshow("Morphological Operations on Mask", mask_closed_img)
 
 cv2.waitKey(0)
 cv2.destroyAllWindows()
