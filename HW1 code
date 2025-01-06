@@ -1,0 +1,136 @@
+import cv2
+import numpy as np
+
+# 讀取圖片
+image = cv2.imread(r'C:\\Users\\b5403175\\Desktop\\B.jpg')
+
+# 使用HSV空間來進行顏色範圍過濾
+def filter_black_gray_roads(image):
+    hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+    # 黑色範圍（在HSV中，黑色通常有較低的亮度值）
+    lower_black = np.array([0, 0, 0])  # HSV空間中的黑色下限
+    upper_black = np.array([180, 255, 80])  # 墛大上限以捕捉灰色
+
+    # 灰白色範圍（在HSV中，灰白色通常有較高的亮度值，但避免抓取接近白色的數值）
+    lower_gray_white = np.array([0, 0, 80])  # HSV空間中的灰白色下限
+    upper_gray_white = np.array([180, 50, 200])  # 調整上限以避免抓取接近白色的數值
+
+    # 避免抓取藍色成分
+    lower_blue_avoid = np.array([100, 150, 0])
+    upper_blue_avoid = np.array([140, 255, 255])
+
+    # 黑色範圍過濾
+    mask_black = cv2.inRange(hsv_image, lower_black, upper_black)
+    
+    # 灰白色範圍過濾
+    mask_gray_white = cv2.inRange(hsv_image, lower_gray_white, upper_gray_white)
+
+    # 藍色範圍過濾
+    mask_blue_avoid = cv2.inRange(hsv_image, lower_blue_avoid, upper_blue_avoid)
+
+    # 合併遮罩，並排除藍色成分
+    mask_combined = cv2.bitwise_or(mask_black, mask_gray_white)
+    mask_combined = cv2.bitwise_and(mask_combined, cv2.bitwise_not(mask_blue_avoid))
+
+    return mask_combined, hsv_image
+
+# 對遮罩進行形態學操作
+def morphological_operations(mask):
+    kernel = np.ones((5,5),np.uint8)
+    
+    # 開運算 (去除噪點)
+    mask_opened = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    
+    # 閉運算 (填補孔洞)
+    mask_closed = cv2.morphologyEx(mask_opened, cv2.MORPH_CLOSE, kernel)
+    
+    return mask_closed
+
+# 灰階處理
+def cvtColor(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    return gray
+
+gray = cvtColor(image)
+
+# Sobel 邊緣檢測 (增強效果)
+def sobel_edge_detection(image, x):
+    sobel_x = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=x)  # 墛大內核大小，提高邊緣檢測
+    sobel_y = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=x)
+    sobel_mag = cv2.magnitude(sobel_x, sobel_y)
+    sobel_mag = np.uint8(np.absolute(sobel_mag))  # 絕對值
+    return sobel_mag
+
+sobel_image = sobel_edge_detection(gray, 3)
+
+# LBP 邊緣檢測
+def lbp(image, mask):
+    lbp_image = np.zeros_like(image)
+    for i in range(1, image.shape[0] - 1):
+        for j in range(1, image.shape[1] - 1):
+            if mask[i, j] > 0:  # 只在遮罩範圍內執行 LBP
+                center = image[i, j]
+                binary_string = ''
+                binary_string += '1' if image[i-1, j-1] > center else '0'
+                binary_string += '1' if image[i-1, j] > center else '0'
+                binary_string += '1' if image[i-1, j+1] > center else '0'
+                binary_string += '1' if image[i, j+1] > center else '0'
+                binary_string += '1' if image[i+1, j+1] > center else '0'
+                binary_string += '1' if image[i+1, j] > center else '0'
+                binary_string += '1' if image[i+1, j-1] > center else '0'
+                binary_string += '1' if image[i, j-1] > center else '0'
+                lbp_image[i, j] = int(binary_string, 2)
+    return lbp_image
+
+# 過濾黑灰色道路並進行形態學操作
+mask_black_gray_roads_raw, hsv_image = filter_black_gray_roads(image)
+mask_black_gray_roads = morphological_operations(mask_black_gray_roads_raw)
+
+lbp_image = lbp(gray, mask_black_gray_roads)
+
+# 繪製直方圖並找出前10高項，只計算有hsv遮罩的地方
+def plot_histogram_and_find_top10(image, mask):
+    hist = cv2.calcHist([image], [0], mask, [256], [0, 256])
+    hist_img = np.zeros((300, 256), dtype=np.uint8)
+    hist = cv2.normalize(hist,hist).flatten()
+    
+    for x,y in enumerate(hist):
+        cv2.line(hist_img,(x,int(300)),(x,int(300-y*300)),255)
+    
+    # 找出前10高項
+    top10_indices = np.argsort(hist)[::-1][:10]
+    
+    return hist_img, top10_indices
+
+hist_img, top10_indices = plot_histogram_and_find_top10(lbp_image, mask_black_gray_roads)
+
+# 根據直方圖的前10高項進行標記，未標記的地方塗成紅色
+def mark_top10_regions_on_original(image, lbp_image, top10_indices):
+    marked_image = np.zeros_like(image)
+    
+    # 將未標記的地方塗成紅色 (Red)
+    marked_image[:] = [0, 0, 255]
+    
+    for idx in top10_indices:
+        marked_image[lbp_image == idx] = image[lbp_image == idx]  # 標記的地方保持原色
+    
+    return marked_image
+
+marked_regions = mark_top10_regions_on_original(image.copy(), lbp_image.copy(), top10_indices)
+
+# 將標記著色的圖覆蓋在原圖上
+result_image = cv2.addWeighted(image.copy(), 0.7, marked_regions.copy(), 0.3, 0)
+
+# 顯示結果圖片
+cv2.imshow("Original", image)
+cv2.imshow("Gray", gray)
+cv2.imshow("Sobel Edges", sobel_image)
+cv2.imshow("LBP", lbp_image)
+cv2.imshow("Histogram", hist_img)
+cv2.imshow("Marked Regions on Original", result_image)
+cv2.imshow("HSV Filtered", mask_black_gray_roads_raw) 
+cv2.imshow("Morphological Operations on Mask", mask_black_gray_roads)
+
+cv2.waitKey(0)
+cv2.destroyAllWindows()
