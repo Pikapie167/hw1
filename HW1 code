@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 # 讀取圖片
-image = cv2.imread(r'C:\\Users\\b5403175\\Desktop\\OIP.jpg')
+image = cv2.imread(r'C:\\Users\\b5403175\\Desktop\\C.jpg')
 
 # 使用HSV空間來進行顏色範圍過濾
 def filter_black_gray_roads(image):
@@ -64,7 +64,7 @@ def sobel_edge_detection(image, x):
 
 sobel_image = sobel_edge_detection(gray, 3)
 
-# LBP 邊緣檢測
+# LBP 邊緣檢測應用於Sobel邊緣檢測後的圖像
 def lbp(image, mask):
     lbp_image = np.zeros_like(image)
     for i in range(1, image.shape[0] - 1):
@@ -87,7 +87,7 @@ def lbp(image, mask):
 mask_black_gray_roads_raw, hsv_image = filter_black_gray_roads(image)
 mask_black_gray_roads = morphological_operations(mask_black_gray_roads_raw)
 
-lbp_image = lbp(gray, mask_black_gray_roads)
+lbp_image = lbp(sobel_image, mask_black_gray_roads)
 
 # 繪製直方圖並找出前3高項，只計算有hsv遮罩的地方
 def plot_histogram_and_find_top3(image, mask):
